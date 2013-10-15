@@ -56,6 +56,15 @@ void fill_buffer( char * write_buffer, time_t cur_time ) {
     strcat( write_buffer, time_str );
 }
 
+void usb_device_write() {
+    system("cp temperature_log.txt /media/USB20FD");
+}
+
+int is_key_pressed() {
+    
+    return 0;
+}
+
 int main() {
     char log_file[] = "temperature_log.txt";
     int i;
@@ -75,7 +84,8 @@ int main() {
             printf( "%s\n", write_buffer );
             prev_time = cur_time;   
         }
-        
+        if( is_key_pressed() )
+            usb_device_write();
     }
     
     return 0;
