@@ -1,0 +1,7 @@
+
+adc value to resistance to temperature
+store date and temperature in a file
+use rtc and lcd
+detect usb flash drive and copy the file to usb
+
+
