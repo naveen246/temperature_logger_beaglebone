@@ -3,7 +3,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <sys/time.h>
+#include <time.h>
+#include <unistd.h>
+
+#include "io_lib.c"
+#include "lcd.c"
+
+#define pin 60
 
 double ohms_to_celsius( double ohms ) {
     double beta = 3930; // ( approx value, see datasheet for accurate value )
@@ -32,11 +38,9 @@ void read_temperature( double * temperature_values ) {
     for( i = 0; i < 8; i++ ) {
         strcpy( adc_file, adc_path );
         strcat( adc_file, adc_files[i] );
-        FILE *adc_fp = fopen( adc_file, "r" );
-        fscanf( adc_fp, "%s", adc_str );
+        read_val( adc_file, adc_str );
         temperature_values[i] = adc_mv_to_celsius( atoi( adc_str ) );
         printf("%d  %f;\t", atoi( adc_str ), temperature_values[i] );
-        fclose( adc_fp );
     }
     printf("\n");
 }
@@ -65,27 +69,59 @@ int is_key_pressed() {
     return 0;
 }
 
+void init_io_pin() {
+    init_gpio( pin );
+    gpio_direction_out( pin );
+}
+
+void lcd_write() {
+    lcd_gotoxy( 1, 1 );
+    lcd_putc( 't' );
+    lcd_putc( 'e' );
+    lcd_putc( 's' );
+    lcd_putc( 't' );
+    lcd_putc( '1' );
+    lcd_putc( '2' );
+}
+
+void init() {
+    lcd_init();
+    lcd_write();
+
+    init_io_pin();
+}
+
 int main() {
+    init();
+    
     char log_file[] = "temperature_log.txt";
-    int i;
+    int i, last_log_min;
     char write_buffer[ 200 ];
-    time_t prev_time, cur_time;
+    time_t cur_time;
+    struct tm * timeinfo;
     time( &cur_time );
-    prev_time = cur_time;
+    timeinfo = localtime (&cur_time);
+    last_log_min = timeinfo->tm_min;
     
     while( 1 ) {
         time( &cur_time );
-        if( cur_time != prev_time ) {
+        timeinfo = localtime (&cur_time);
+        if( timeinfo->tm_min % 1 == 0 && timeinfo->tm_min != last_log_min ) {
             fill_buffer( write_buffer, cur_time );
             FILE *fout = fopen( "temperature_log.txt", "a+" );
             fwrite(write_buffer, strlen(write_buffer), 1, fout);
             fclose( fout );
             sync();
             printf( "%s\n", write_buffer );
-            prev_time = cur_time;   
+            last_log_min = timeinfo->tm_min;
         }
         if( is_key_pressed() )
             usb_device_write();
+
+        if( gpio_get_value( pin ) ) gpio_set_value( pin, 0 );
+        else                        gpio_set_value( pin, 1 );
+
+        lcd_write();
     }
     
     return 0;
