@@ -9,7 +9,6 @@
 #include "io_lib.c"
 #include "lcd.c"
 
-#define pin 60
 
 double ohms_to_celsius( double ohms ) {
     double beta = 3930; // ( approx value, see datasheet for accurate value )
@@ -69,26 +68,16 @@ int is_key_pressed() {
     return 0;
 }
 
-void init_io_pin() {
-    init_gpio( pin );
-    gpio_direction_out( pin );
-}
-
 void lcd_write() {
     lcd_gotoxy( 1, 1 );
-    lcd_putc( 't' );
-    lcd_putc( 'e' );
-    lcd_putc( 's' );
-    lcd_putc( 't' );
-    lcd_putc( '1' );
-    lcd_putc( '2' );
+    lcd_puts( "abcdef ", 7 );
+    lcd_gotoxy( 1, 2 );
+    lcd_putd( 6, 123456 );
 }
 
 void init() {
     lcd_init();
     lcd_write();
-
-    init_io_pin();
 }
 
 int main() {
@@ -117,9 +106,6 @@ int main() {
         }
         if( is_key_pressed() )
             usb_device_write();
-
-        if( gpio_get_value( pin ) ) gpio_set_value( pin, 0 );
-        else                        gpio_set_value( pin, 1 );
 
         lcd_write();
     }

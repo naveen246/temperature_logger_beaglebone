@@ -151,6 +151,13 @@ void lcd_putc( char c ) {
     lcd_send_byte( 1, c );  
 }
 
+void lcd_puts( char * str, int str_len ) {
+    int i;
+    for( i = 0; i < str_len; i++ ) {
+        lcd_send_byte( 1, str[ i ] );
+    }
+}
+
 void lcd_putd( int digit_count, int num ) {
     int d = pow( 10, digit_count - 1 );
     int msd;
