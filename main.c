@@ -6,8 +6,39 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "io_lib.c"
-#include "lcd.c"
+#include "io_lib.h"
+#include "lcd.h"
+
+#define cursor_left     70
+#define cursor_right    72
+#define inc_key         74
+#define dec_key         76
+#define set_key         78    
+
+typedef struct lcd_xy {
+    int col;
+    int row;
+} lcd_xy;
+
+typedef struct lcd_pos {
+    lcd_xy t1;
+    lcd_xy t2;
+    lcd_xy t3;
+    lcd_xy t4;
+    lcd_xy t5;
+    lcd_xy t6;
+    lcd_xy date;
+    lcd_xy month;
+    lcd_xy year;
+    lcd_xy hour;
+    lcd_xy min;
+    lcd_xy sec;
+    lcd_xy int_hour;
+    lcd_xy int_min;
+    lcd_xy log_count;
+} lcd_pos;   
+
+lcd_pos pos = {  }
 
 
 double ohms_to_celsius( double ohms ) {
@@ -26,33 +57,22 @@ double adc_mv_to_celsius( int adc_mv ) {
     return ohms_to_celsius( ohms );
 }
 
-void read_temperature( double * temperature_values ) {
-    char adc_path[40] = "/sys/devices/ocp.2/helper.14/";
-    char adc_files[8][5] = { "AIN0", "AIN1", "AIN2", "AIN3", "AIN4", "AIN5", "AIN6", "AIN7" };
+double read_temperature( int index ) {
     char adc_file[40];
     char adc_str[10];
-    
-    int i;
-    printf("\n adc_val : ");
-    for( i = 0; i < 8; i++ ) {
-        strcpy( adc_file, adc_path );
-        strcat( adc_file, adc_files[i] );
-        read_val( adc_file, adc_str );
-        temperature_values[i] = adc_mv_to_celsius( atoi( adc_str ) );
-        printf("%d  %f;\t", atoi( adc_str ), temperature_values[i] );
-    }
-    printf("\n");
+
+    sprintf( adc_file, "/sys/devices/ocp.2/helper.14/AIN%d", index );
+    read_val( adc_file, adc_str );
+    return adc_mv_to_celsius( atoi( adc_str ) );
 }
 
 void fill_buffer( char * write_buffer, time_t cur_time ) {
-    double temperature_values[8] = { 0 };
     char temperature[10];
     char time_str[30];
-    read_temperature( temperature_values );
     sprintf( write_buffer, "\n" );
     int i;
-    for(i = 0; i < 8; i++ ) {
-        sprintf( temperature, "%.2f\t", temperature_values[i] );
+    for(i = 0; i < 6; i++ ) {
+        sprintf( temperature, "%.2f\t", read_temperature( i ) );
         strcat( write_buffer, temperature );
     }
     sprintf( time_str, "\t%s", ctime( &cur_time ) );
@@ -60,54 +80,86 @@ void fill_buffer( char * write_buffer, time_t cur_time ) {
 }
 
 void usb_device_write() {
-    system("cp temperature_log.txt /media/USB20FD");
+    system("if [ -d \"/media/USB20FD\" ]; then cp temperature_log.txt /media/USB20FD; else echo \"usb drive not inserted properly\"; fi");
 }
 
-int is_key_pressed() {
-    
+int is_key_pressed( int key ) {
+    if( gpio_get_value( key ) == 0 ) {
+        delay_ms( 200 );
+        if( gpio_get_value( key ) == 0 )
+            return 1;
+    }
     return 0;
+}
+
+void set_rtc_time( struct tm * timeinfo; ) {
+    time_t set_time = mktime ( timeinfo );
+    stime( &set_time );
+    system( "hwclock -w -f /dev/rtc1" );
+}
+
+void set_mode() {
+
 }
 
 void lcd_write() {
     lcd_gotoxy( 1, 1 );
     lcd_puts( "abcdef ", 7 );
     lcd_gotoxy( 1, 2 );
-    lcd_putd( 6, 123456 );
+    lcd_putd( 123456, 6 );
+}
+
+int is_time_to_write( time_t cur_time, time_t last_log_time, int temp_log_interval_min ) {
+    if( cur_time - last_log_time >= temp_log_interval_min * 60 )
+        return 1;
+    return 0;
+}
+
+void input_btn_init() {
+    init_gpio( cursor_left );
+    init_gpio( cursor_right );
+    init_gpio( inc_key );
+    init_gpio( dec_key );
+    init_gpio( set_key );
+    
+    gpio_direction_in( cursor_left );
+    gpio_direction_in( cursor_right );
+    gpio_direction_in( inc_key );
+    gpio_direction_in( dec_key );
+    gpio_direction_in( set_key );
 }
 
 void init() {
+    input_btn_init();
     lcd_init();
-    lcd_write();
 }
 
 int main() {
     init();
     
     char log_file[] = "temperature_log.txt";
-    int i, last_log_min;
     char write_buffer[ 200 ];
-    time_t cur_time;
-    struct tm * timeinfo;
+    time_t cur_time, last_log_time;
     time( &cur_time );
-    timeinfo = localtime (&cur_time);
-    last_log_min = timeinfo->tm_min;
+    last_log_time = cur_time;
     
     while( 1 ) {
         time( &cur_time );
-        timeinfo = localtime (&cur_time);
-        if( timeinfo->tm_min % 1 == 0 && timeinfo->tm_min != last_log_min ) {
+        if( is_time_to_write( cur_time, last_log_time, temp_log_interval_min ) ) {
             fill_buffer( write_buffer, cur_time );
-            FILE *fout = fopen( "temperature_log.txt", "a+" );
-            fwrite(write_buffer, strlen(write_buffer), 1, fout);
-            fclose( fout );
-            sync();
+            FILE *fout = fopen( log_file, "a+" );
+            if( fout != NULL ) {
+                fwrite(write_buffer, strlen(write_buffer), 1, fout);
+                fclose( fout );
+                sync();
+            }
             printf( "%s\n", write_buffer );
-            last_log_min = timeinfo->tm_min;
+            last_log_time = cur_time;
         }
-        if( is_key_pressed() )
+        if( is_key_pressed( set_key ) )
             usb_device_write();
-
-        lcd_write();
+        else if( is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
+            set_mode();
     }
     
     return 0;

@@ -1,21 +1,23 @@
 
-int get_pin_no( int port, int pin ) {
-    return port * 32 + pin;
-}
+#include "io_lib.h"
+
+char * gpio_path = "/sys/class/gpio/";
 
 void read_val( char * filename, char * val ) {
     FILE *fp = fopen( filename, "r" );
-    fscanf( fp, "%s", val );
-    fclose( fp );
+    if( fp != NULL ) {
+        fscanf( fp, "%s", val );
+        fclose( fp );
+    }
 }
 
 void write_val( char * filename, char * val ) {
-    FILE *fp = fopen( filename, "r+" );
-    fprintf( fp, "%s", val );
-    fclose( fp );
+    FILE *fp = fopen( filename, "w" );
+    if( fp != NULL ) {
+        fprintf( fp, "%s", val );
+        fclose( fp );
+    }
 }
-
-char gpio_path[25] = "/sys/class/gpio/";
 
 void init_gpio( int gpio_no ) {
     char gpio_export[40];
