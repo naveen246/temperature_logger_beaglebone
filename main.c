@@ -21,24 +21,23 @@ typedef struct lcd_xy {
 } lcd_xy;
 
 typedef struct lcd_pos {
-    lcd_xy t1;
-    lcd_xy t2;
-    lcd_xy t3;
-    lcd_xy t4;
-    lcd_xy t5;
-    lcd_xy t6;
     lcd_xy date;
     lcd_xy month;
     lcd_xy year;
     lcd_xy hour;
     lcd_xy min;
     lcd_xy sec;
-    lcd_xy int_hour;
-    lcd_xy int_min;
+    lcd_xy hour_intrvl;
+    lcd_xy min_intrvl;
     lcd_xy log_count;
 } lcd_pos;   
 
-lcd_pos pos = {  }
+lcd_pos data_pos =  {   .date = { 1, 3 },   .month = { 4, 3 },  .year = { 7, 3 }, 
+                        .hour = { 13, 3 },  .min = { 16, 3 },   .sec = { 19, 3 },
+                        .hour_intrvl={5,4}, .min_intrvl={8,4},  .log_count={15,4}
+                    };
+
+int hour_intrvl = 0, min_intrvl = 30, log_count = 0;
 
 
 double ohms_to_celsius( double ohms ) {
@@ -72,7 +71,7 @@ void fill_buffer( char * write_buffer, time_t cur_time ) {
     sprintf( write_buffer, "\n" );
     int i;
     for(i = 0; i < 6; i++ ) {
-        sprintf( temperature, "%.2f\t", read_temperature( i ) );
+        sprintf( temperature, "%4.1f\t", read_temperature( i ) );
         strcat( write_buffer, temperature );
     }
     sprintf( time_str, "\t%s", ctime( &cur_time ) );
@@ -86,8 +85,7 @@ void usb_device_write() {
 int is_key_pressed( int key ) {
     if( gpio_get_value( key ) == 0 ) {
         delay_ms( 200 );
-        if( gpio_get_value( key ) == 0 )
-            return 1;
+        if( gpio_get_value( key ) == 0 ) return 1;
     }
     return 0;
 }
@@ -102,11 +100,67 @@ void set_mode() {
 
 }
 
-void lcd_write() {
-    lcd_gotoxy( 1, 1 );
-    lcd_puts( "abcdef ", 7 );
-    lcd_gotoxy( 1, 2 );
-    lcd_putd( 123456, 6 );
+int access_data( FILE * fp, int pos, int data_len ) {
+    char data_str[10];
+    fseek( fp, pos, SEEK_SET );
+    fgets( data_str, data_len, fp );
+    return atoi( data_str );
+}
+
+void store_data( int hour, int min, int count ) {
+    int max_data_len = 9;
+    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
+    FILE * data_store = data_store = fopen( "data_store.txt", "w" );
+    if( data_store != NULL ) {
+        fseek( data_store, hour_pos, SEEK_SET );
+        fprintf( data_store, "%d", hour_intrvl );
+        fseek( data_store, min_pos, SEEK_SET );
+        fprintf( data_store, "%d", min_intrvl );
+        fseek( data_store, count_pos, SEEK_SET );
+        fprintf( data_store, "%d", log_count );
+        fclose( data_store );
+    }
+}
+
+void read_stored_data() {
+    FILE * data_store = fopen( "data_store.txt", "r+" );
+    int max_data_len = 9;
+    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
+    if( data_store != NULL ) {
+        hour_intrvl = access_data( data_store, hour_pos, max_data_len );
+        min_intrvl = access_data( data_store, min_pos, max_data_len );
+        log_count = access_data( data_store, count_pos, max_data_len )
+        fclose( data_store );
+    } else {
+        hour_intrvl = 0; min_intrvl = 30; log_count = 0;
+        store_data( hour_intrvl, min_intrvl, log_count );
+    }
+}
+
+void fill_line_str( char * cur_line, int line_no ) {
+    switch( line_no ) {
+        if( line_no == 1 )
+            sprintf( cur_line, "%4.1f    %4.1f    %4.1f", read_temperature(0), read_temperature(1), read_temperature(2) );
+        else if( line_no == 2 )
+            sprintf( cur_line, "%4.1f    %4.1f    %4.1f", read_temperature(3), read_temperature(4), read_temperature(5) );
+        else if( line_no == 3 ) {
+            time_t cur_time = time(0);
+            struct tm * timeinfo = localtime( &cur_time );
+            sprintf( cur_line, "%2d/%2d/%4d  %2d:%2d:%2d", tm->tm_mday, tm_mon, tm_year, tm->hour, tm->min, tm->sec );
+        } else if( line_no == 4 ) {
+            sprintf( cur_line, "INT-%2d:%2d CNT-%6d", hour_intrvl, min_intrvl, log_count );
+        }
+    }
+}
+
+void display_data_lcd() {
+    char cur_line[21];
+    int line_no = 1;
+    for( line_no = 1; line_no <= 4; line_no++ ) {
+        fill_line_str( cur_line, line_no );
+        lcd_gotoxy( 1, line_no );
+        lcd_puts( cur_line, 20 );
+    }
 }
 
 int is_time_to_write( time_t cur_time, time_t last_log_time, int temp_log_interval_min ) {
@@ -115,7 +169,22 @@ int is_time_to_write( time_t cur_time, time_t last_log_time, int temp_log_interv
     return 0;
 }
 
-void input_btn_init() {
+int log_temperature( time_t cur_time ) {
+    char log_file[] = "temperature_log.txt";
+    char write_buffer[ 200 ];
+    fill_buffer( write_buffer, cur_time );
+    FILE *fout = fopen( log_file, "a+" );
+    if( fout != NULL ) {
+        fwrite(write_buffer, strlen(write_buffer), 1, fout);
+        fclose( fout );
+        sync();
+        printf( "%s\n", write_buffer );
+        return 1;
+    }
+    return 0;
+}
+
+void input_key_init() {
     init_gpio( cursor_left );
     init_gpio( cursor_right );
     init_gpio( inc_key );
@@ -130,36 +199,37 @@ void input_btn_init() {
 }
 
 void init() {
-    input_btn_init();
+    input_key_init();
     lcd_init();
+    read_stored_data();
 }
 
 int main() {
     init();
-    
-    char log_file[] = "temperature_log.txt";
-    char write_buffer[ 200 ];
+
+    int iter_count = 0;
     time_t cur_time, last_log_time;
     time( &cur_time );
     last_log_time = cur_time;
     
     while( 1 ) {
+        iter_count++;
         time( &cur_time );
         if( is_time_to_write( cur_time, last_log_time, temp_log_interval_min ) ) {
-            fill_buffer( write_buffer, cur_time );
-            FILE *fout = fopen( log_file, "a+" );
-            if( fout != NULL ) {
-                fwrite(write_buffer, strlen(write_buffer), 1, fout);
-                fclose( fout );
-                sync();
+            if( log_temperature( cur_time ) ) {
+                log_count++;
+                store_data( hour_intrvl, min_intrvl, log_count );
             }
-            printf( "%s\n", write_buffer );
             last_log_time = cur_time;
         }
         if( is_key_pressed( set_key ) )
             usb_device_write();
         else if( is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
             set_mode();
+        if( iter_count > 100000 ) {
+            display_data_lcd();
+            iter_count = 0;
+        }
     }
     
     return 0;

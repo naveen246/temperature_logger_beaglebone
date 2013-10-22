@@ -1,7 +1,9 @@
 
-adc value to resistance to temperature
-store date and temperature in a file
-use rtc and lcd
-detect usb flash drive and copy the file to usb
 
-
+store date and temperature in a file 								- done
+use rtc and lcd														- done
+detect usb flash drive and copy the file to usb						- done
+store and retrieve int int_hour, int_min, log_count; from a file 	- done
+implement set_mode()												- 
+implement limiting of data_log to some limit 						- 
+adc value to resistance to temperature								- after getting thermistor
