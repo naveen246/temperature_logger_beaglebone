@@ -37,7 +37,7 @@ lcd_pos data_pos =  {   .date = { 1, 3 },   .month = { 4, 3 },  .year = { 7, 3 }
                         .hour_intrvl={5,4}, .min_intrvl={8,4},  .log_count={15,4}
                     };
 
-int hour_intrvl = 0, min_intrvl = 30, log_count = 0;
+int hour_intrvl = 0, min_intrvl = 1, log_count = 0;
 
 
 double ohms_to_celsius( double ohms ) {
@@ -60,9 +60,12 @@ double read_temperature( int index ) {
     char adc_file[40];
     char adc_str[10];
 
-    sprintf( adc_file, "/sys/devices/ocp.2/helper.14/AIN%d", index );
+    sprintf( adc_file, "/sys/devices/ocp.2/helper.11/AIN%d", index );
     read_val( adc_file, adc_str );
-    return adc_mv_to_celsius( atoi( adc_str ) );
+    double temperature = adc_mv_to_celsius( atoi( adc_str ) );
+    if( temperature < -99 ) temperature = -99;
+    else if( temperature > 999 ) temperature = 999;
+    return temperature;
 }
 
 void fill_buffer( char * write_buffer, time_t cur_time ) {
@@ -83,6 +86,7 @@ void usb_device_write() {
 }
 
 int is_key_pressed( int key ) {
+    return 0;
     if( gpio_get_value( key ) == 0 ) {
         delay_ms( 200 );
         if( gpio_get_value( key ) == 0 ) return 1;
@@ -90,14 +94,90 @@ int is_key_pressed( int key ) {
     return 0;
 }
 
-void set_rtc_time( struct tm * timeinfo; ) {
+void set_rtc_time( struct tm * timeinfo ) {
     time_t set_time = mktime ( timeinfo );
     stime( &set_time );
     system( "hwclock -w -f /dev/rtc1" );
 }
 
-void set_mode() {
+int change_disp_val( int val, int max_val, int min_val, int pos_col, int pos_row, int no_of_digits ) {
+    while( 1 ) {
+        if( is_key_pressed( inc_key ) ) {
+            if( val >= max_val ) val = 1;
+            else val++;
+            lcd_gotoxy( pos_col, pos_row );
+            lcd_putd( val, no_of_digits );
+        } else if( is_key_pressed( dec_key ) ) {
+            if( val <= min_val ) val = max_val;
+            else val--;
+            lcd_gotoxy( pos_col, pos_row );
+            lcd_putd( val, no_of_digits );
+        } else if( is_key_pressed( set_key ) || is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
+            break;
+    }
+    return val;
+}
 
+void set_time_val( char c, int val ) {
+    time_t cur_time;
+    struct tm * timeinfo;
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    switch( c ) {
+        case 'd':
+            timeinfo->tm_mday = val; break;
+        case 'm':
+            timeinfo->tm_mon = val; break;
+        case 'y':
+            timeinfo->tm_year = val; break;
+        case 'h':
+            timeinfo->tm_hour = val; break;
+        case 'n':
+            timeinfo->tm_min = val; break;
+        case 's':
+            timeinfo->tm_sec = val; break;
+    }
+    set_rtc_time( timeinfo );
+}
+
+void set_mode() {
+    int val;
+    time_t cur_time;
+    struct tm * timeinfo;
+
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    val = change_disp_val( timeinfo->tm_mday, 31, 1, data_pos.date.col, data_pos.date.row, 2 );
+    if( val != timeinfo->tm_mday ) set_time_val( 'd', val );
+
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    val = change_disp_val( timeinfo->tm_mon, 11, 0, data_pos.month.col, data_pos.month.row, 2 );
+    if( val != timeinfo->tm_mon ) set_time_val( 'm', val );
+
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    val = change_disp_val( timeinfo->tm_year, 2100, 2000, data_pos.year.col, data_pos.year.row, 4 );
+    if( val != timeinfo->tm_year ) set_time_val( 'y', val );
+
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    val = change_disp_val( timeinfo->tm_hour, 23, 0, data_pos.hour.col, data_pos.hour.row, 2 );
+    if( val != timeinfo->tm_hour ) set_time_val( 'h', val );
+
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    val = change_disp_val( timeinfo->tm_min, 59, 0, data_pos.min.col, data_pos.min.row, 2 );
+    if( val != timeinfo->tm_min ) set_time_val( 'n', val );
+
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    val = change_disp_val( timeinfo->tm_sec, 59, 0, data_pos.sec.col, data_pos.sec.row, 2 );
+    if( val != timeinfo->tm_sec ) set_time_val( 's', val );
+
+    hour_intrvl = change_disp_val( hour_intrvl, 99, 0, data_pos.hour_intrvl.col, data_pos.hour_intrvl.row, 2 );
+    min_intrvl = change_disp_val( min_intrvl, 99, 0, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
+    log_count = change_disp_val( log_count, 99, 0, data_pos.log_count.col, data_pos.log_count.row, 2 );
 }
 
 int access_data( FILE * fp, int pos, int data_len ) {
@@ -108,6 +188,7 @@ int access_data( FILE * fp, int pos, int data_len ) {
 }
 
 void store_data( int hour, int min, int count ) {
+    printf( "store_data\n" );
     int max_data_len = 9;
     int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
     FILE * data_store = data_store = fopen( "data_store.txt", "w" );
@@ -119,37 +200,39 @@ void store_data( int hour, int min, int count ) {
         fseek( data_store, count_pos, SEEK_SET );
         fprintf( data_store, "%d", log_count );
         fclose( data_store );
+    } else {
+        printf( "could not create file data_store\n" );
     }
 }
 
 void read_stored_data() {
+    printf( "read_stored_data\n" );
     FILE * data_store = fopen( "data_store.txt", "r+" );
     int max_data_len = 9;
     int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
     if( data_store != NULL ) {
         hour_intrvl = access_data( data_store, hour_pos, max_data_len );
         min_intrvl = access_data( data_store, min_pos, max_data_len );
-        log_count = access_data( data_store, count_pos, max_data_len )
+        log_count = access_data( data_store, count_pos, max_data_len );
         fclose( data_store );
     } else {
-        hour_intrvl = 0; min_intrvl = 30; log_count = 0;
+        hour_intrvl = 0; min_intrvl = 1; log_count = 0;
         store_data( hour_intrvl, min_intrvl, log_count );
     }
 }
 
 void fill_line_str( char * cur_line, int line_no ) {
-    switch( line_no ) {
-        if( line_no == 1 )
-            sprintf( cur_line, "%4.1f    %4.1f    %4.1f", read_temperature(0), read_temperature(1), read_temperature(2) );
-        else if( line_no == 2 )
-            sprintf( cur_line, "%4.1f    %4.1f    %4.1f", read_temperature(3), read_temperature(4), read_temperature(5) );
-        else if( line_no == 3 ) {
-            time_t cur_time = time(0);
-            struct tm * timeinfo = localtime( &cur_time );
-            sprintf( cur_line, "%2d/%2d/%4d  %2d:%2d:%2d", tm->tm_mday, tm_mon, tm_year, tm->hour, tm->min, tm->sec );
-        } else if( line_no == 4 ) {
-            sprintf( cur_line, "INT-%2d:%2d CNT-%6d", hour_intrvl, min_intrvl, log_count );
-        }
+    if( line_no == 1 )
+        sprintf( cur_line, "%3.1f  %3.1f  %3.1f ", read_temperature(0), read_temperature(1), read_temperature(2) );
+    else if( line_no == 2 )
+        sprintf( cur_line, "%3.1f  %3.1f  %3.1f ", read_temperature(3), read_temperature(4), read_temperature(5) );
+    else if( line_no == 3 ) {
+        time_t cur_time;
+        time( &cur_time );
+        struct tm * timeinfo = localtime( &cur_time );
+        sprintf( cur_line, "%02d/%02d/%4d  %02d:%02d:%02d", timeinfo->tm_mday, timeinfo->tm_mon, timeinfo->tm_year+1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec );
+    } else if( line_no == 4 ) {
+        sprintf( cur_line, "INT:%02d:%02d CNT:%06d", hour_intrvl, min_intrvl, log_count );
     }
 }
 
@@ -163,8 +246,8 @@ void display_data_lcd() {
     }
 }
 
-int is_time_to_write( time_t cur_time, time_t last_log_time, int temp_log_interval_min ) {
-    if( cur_time - last_log_time >= temp_log_interval_min * 60 )
+int is_time_to_write( time_t cur_time, time_t last_log_time ) {
+    if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
         return 1;
     return 0;
 }
@@ -215,7 +298,7 @@ int main() {
     while( 1 ) {
         iter_count++;
         time( &cur_time );
-        if( is_time_to_write( cur_time, last_log_time, temp_log_interval_min ) ) {
+        if( is_time_to_write( cur_time, last_log_time ) ) {
             if( log_temperature( cur_time ) ) {
                 log_count++;
                 store_data( hour_intrvl, min_intrvl, log_count );

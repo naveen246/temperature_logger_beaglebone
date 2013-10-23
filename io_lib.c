@@ -1,4 +1,5 @@
 
+#include <stdio.h>
 #include "io_lib.h"
 
 char * gpio_path = "/sys/class/gpio/";
