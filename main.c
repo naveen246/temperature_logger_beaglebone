@@ -82,11 +82,15 @@ void fill_buffer( char * write_buffer, time_t cur_time ) {
 }
 
 void usb_device_write() {
-    system("if [ -d \"/media/USB20FD\" ]; then cp temperature_log.txt /media/USB20FD; else echo \"usb drive not inserted properly\"; fi");
+    system("mount /dev/sda1 /media/usb_device");
+    system("cp temperature_log.txt /media/usb_device");
+    system("umount /dev/sda1");
+    printf("Data Transferred.\n");
+    printf("USB drive can be removed.\n");
+    //system("if [ -d \"/media/USB20FD\" ]; then cp temperature_log.txt /media/USB20FD; else echo \"usb drive not inserted properly\"; fi");
 }
 
 int is_key_pressed( int key ) {
-    return 0;
     if( gpio_get_value( key ) == 0 ) {
         delay_ms( 200 );
         if( gpio_get_value( key ) == 0 ) return 1;
@@ -102,18 +106,23 @@ void set_rtc_time( struct tm * timeinfo ) {
 
 int change_disp_val( int val, int max_val, int min_val, int pos_col, int pos_row, int no_of_digits ) {
     while( 1 ) {
+        lcd_gotoxy( pos_col, pos_row );
+        lcd_putd( val, no_of_digits );
+        delay_ms(200);
         if( is_key_pressed( inc_key ) ) {
-            if( val >= max_val ) val = 1;
+            if( val >= max_val ) val = min_val;
             else val++;
-            lcd_gotoxy( pos_col, pos_row );
-            lcd_putd( val, no_of_digits );
         } else if( is_key_pressed( dec_key ) ) {
             if( val <= min_val ) val = max_val;
             else val--;
-            lcd_gotoxy( pos_col, pos_row );
-            lcd_putd( val, no_of_digits );
         } else if( is_key_pressed( set_key ) || is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
             break;
+
+        lcd_gotoxy( pos_col, pos_row );
+        int i;
+        for( i = 0; i < no_of_digits; i++ )
+            lcd_putc( ' ' );
+        delay_ms(100);
     }
     return val;
 }
@@ -152,13 +161,13 @@ void set_mode() {
 
     time( &cur_time );
     timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_mon, 11, 0, data_pos.month.col, data_pos.month.row, 2 );
-    if( val != timeinfo->tm_mon ) set_time_val( 'm', val );
+    val = change_disp_val( timeinfo->tm_mon+1, 12, 1, data_pos.month.col, data_pos.month.row, 2 );
+    if( val != timeinfo->tm_mon+1 ) set_time_val( 'm', val-1 );
 
     time( &cur_time );
     timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_year, 2100, 2000, data_pos.year.col, data_pos.year.row, 4 );
-    if( val != timeinfo->tm_year ) set_time_val( 'y', val );
+    val = change_disp_val( timeinfo->tm_year+1900, 2100, 2000, data_pos.year.col, data_pos.year.row, 4 );
+    if( val != timeinfo->tm_year+1900 ) set_time_val( 'y', val-1900 );
 
     time( &cur_time );
     timeinfo = localtime( &cur_time );
@@ -177,7 +186,7 @@ void set_mode() {
 
     hour_intrvl = change_disp_val( hour_intrvl, 99, 0, data_pos.hour_intrvl.col, data_pos.hour_intrvl.row, 2 );
     min_intrvl = change_disp_val( min_intrvl, 99, 0, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
-    log_count = change_disp_val( log_count, 99, 0, data_pos.log_count.col, data_pos.log_count.row, 2 );
+    log_count = change_disp_val( log_count, 99, 0, data_pos.log_count.col, data_pos.log_count.row, 6 );
 }
 
 int access_data( FILE * fp, int pos, int data_len ) {
@@ -188,7 +197,6 @@ int access_data( FILE * fp, int pos, int data_len ) {
 }
 
 void store_data( int hour, int min, int count ) {
-    printf( "store_data\n" );
     int max_data_len = 9;
     int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
     FILE * data_store = data_store = fopen( "data_store.txt", "w" );
@@ -230,7 +238,7 @@ void fill_line_str( char * cur_line, int line_no ) {
         time_t cur_time;
         time( &cur_time );
         struct tm * timeinfo = localtime( &cur_time );
-        sprintf( cur_line, "%02d/%02d/%4d  %02d:%02d:%02d", timeinfo->tm_mday, timeinfo->tm_mon, timeinfo->tm_year+1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec );
+        sprintf( cur_line, "%02d/%02d/%4d  %02d:%02d:%02d", timeinfo->tm_mday, timeinfo->tm_mon+1, timeinfo->tm_year+1900, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec );
     } else if( line_no == 4 ) {
         sprintf( cur_line, "INT:%02d:%02d CNT:%06d", hour_intrvl, min_intrvl, log_count );
     }
@@ -247,7 +255,8 @@ void display_data_lcd() {
 }
 
 int is_time_to_write( time_t cur_time, time_t last_log_time ) {
-    if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
+    //if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
+    if( cur_time != last_log_time )
         return 1;
     return 0;
 }
@@ -309,7 +318,7 @@ int main() {
             usb_device_write();
         else if( is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
             set_mode();
-        if( iter_count > 100000 ) {
+        if( iter_count > 1000 ) {
             display_data_lcd();
             iter_count = 0;
         }
