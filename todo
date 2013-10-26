@@ -4,6 +4,16 @@ store date and temperature in a file 								- done
 use rtc and lcd														- done
 detect usb flash drive and copy the file to usb						- done
 store and retrieve int int_hour, int_min, log_count; from a file 	- done
-implement set_mode()												- 
-implement limiting of data_log to some limit 						- 
+implement set_mode()												- done
+
 adc value to resistance to temperature								- after getting thermistor
+
+change to mounting of usb using uuid 								- done
+display when writing to usb is complete 							- done
+implement limiting of data_log to some limit 						- done
+write log_count to log 												- done
+
+
+refine setmode 
+reduce startup time
+when count is set to 0 call create_new_log_file()

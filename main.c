@@ -9,11 +9,13 @@
 #include "io_lib.h"
 #include "lcd.h"
 
-#define cursor_left     70
-#define cursor_right    72
-#define inc_key         74
-#define dec_key         76
-#define set_key         78    
+#define cursor_left     72
+#define cursor_right    74
+#define inc_key         76
+#define dec_key         78
+#define set_key         8  
+
+#define max_log_count   10000
 
 typedef struct lcd_xy {
     int col;
@@ -68,25 +70,23 @@ double read_temperature( int index ) {
     return temperature;
 }
 
-void fill_buffer( char * write_buffer, time_t cur_time ) {
-    char temperature[10];
-    char time_str[30];
-    sprintf( write_buffer, "\n" );
-    int i;
-    for(i = 0; i < 6; i++ ) {
-        sprintf( temperature, "%4.1f\t", read_temperature( i ) );
-        strcat( write_buffer, temperature );
-    }
-    sprintf( time_str, "\t%s", ctime( &cur_time ) );
-    strcat( write_buffer, time_str );
+void create_new_log_file() {
+    //system("rm /home/temperature_log_old.txt");
+    //system("mv /home/temperature_log.txt /home/temperature_log_old.txt");
+    remove( "/home/temperature_log_old.txt" );
+    rename( "/home/temperature_log.txt", "/home/temperature_log_old.txt" );
 }
 
 void usb_device_write() {
-    system("mount /dev/sda1 /media/usb_device");
-    system("cp temperature_log.txt /media/usb_device");
-    system("umount /dev/sda1");
-    printf("Data Transferred.\n");
-    printf("USB drive can be removed.\n");
+    system("mkdir /media/usb_device" );
+    system("mount -U 44B3-2CFA /media/usb_device");
+    system("cp /home/temperature_log.txt /media/usb_device");
+    system("cp /home/temperature_log_old.txt /media/usb_device");
+    system("umount /media/usb_device");
+    lcd_gotoxy( 1, 4 );
+    lcd_puts( "Data transfer done  ", 20 );
+    delay_ms( 1000 );
+    delay_ms( 1000 );
     //system("if [ -d \"/media/USB20FD\" ]; then cp temperature_log.txt /media/USB20FD; else echo \"usb drive not inserted properly\"; fi");
 }
 
@@ -105,17 +105,26 @@ void set_rtc_time( struct tm * timeinfo ) {
 }
 
 int change_disp_val( int val, int max_val, int min_val, int pos_col, int pos_row, int no_of_digits ) {
+    int iter_count = 0;
     while( 1 ) {
         lcd_gotoxy( pos_col, pos_row );
         lcd_putd( val, no_of_digits );
         delay_ms(200);
-        if( is_key_pressed( inc_key ) ) {
-            if( val >= max_val ) val = min_val;
+        while ( is_key_pressed( inc_key ) ) {
+            if( max_val == min_val )    val = max_val;
+            else if( val >= max_val )   val = min_val;
             else val++;
-        } else if( is_key_pressed( dec_key ) ) {
-            if( val <= min_val ) val = max_val;
+            lcd_gotoxy( pos_col, pos_row );
+            lcd_putd( val, no_of_digits );
+        }
+        while ( is_key_pressed( dec_key ) ) {
+            if( max_val == min_val )    val = max_val;
+            else if( val <= min_val )   val = max_val;
             else val--;
-        } else if( is_key_pressed( set_key ) || is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
+            lcd_gotoxy( pos_col, pos_row );
+            lcd_putd( val, no_of_digits );
+        } 
+        if( iter_count > 2 && ( is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) ) )
             break;
 
         lcd_gotoxy( pos_col, pos_row );
@@ -123,6 +132,7 @@ int change_disp_val( int val, int max_val, int min_val, int pos_col, int pos_row
         for( i = 0; i < no_of_digits; i++ )
             lcd_putc( ' ' );
         delay_ms(100);
+        iter_count++;
     }
     return val;
 }
@@ -149,83 +159,59 @@ void set_time_val( char c, int val ) {
     set_rtc_time( timeinfo );
 }
 
-void set_mode() {
+void set_mode( char direction ) {
+    static cur_disp_index = 0;
+    int max_disp_index = 9, min_disp_index = 1;
     int val;
     time_t cur_time;
     struct tm * timeinfo;
 
-    time( &cur_time );
-    timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_mday, 31, 1, data_pos.date.col, data_pos.date.row, 2 );
-    if( val != timeinfo->tm_mday ) set_time_val( 'd', val );
-
-    time( &cur_time );
-    timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_mon+1, 12, 1, data_pos.month.col, data_pos.month.row, 2 );
-    if( val != timeinfo->tm_mon+1 ) set_time_val( 'm', val-1 );
-
-    time( &cur_time );
-    timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_year+1900, 2100, 2000, data_pos.year.col, data_pos.year.row, 4 );
-    if( val != timeinfo->tm_year+1900 ) set_time_val( 'y', val-1900 );
-
-    time( &cur_time );
-    timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_hour, 23, 0, data_pos.hour.col, data_pos.hour.row, 2 );
-    if( val != timeinfo->tm_hour ) set_time_val( 'h', val );
-
-    time( &cur_time );
-    timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_min, 59, 0, data_pos.min.col, data_pos.min.row, 2 );
-    if( val != timeinfo->tm_min ) set_time_val( 'n', val );
-
-    time( &cur_time );
-    timeinfo = localtime( &cur_time );
-    val = change_disp_val( timeinfo->tm_sec, 59, 0, data_pos.sec.col, data_pos.sec.row, 2 );
-    if( val != timeinfo->tm_sec ) set_time_val( 's', val );
-
-    hour_intrvl = change_disp_val( hour_intrvl, 99, 0, data_pos.hour_intrvl.col, data_pos.hour_intrvl.row, 2 );
-    min_intrvl = change_disp_val( min_intrvl, 99, 0, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
-    log_count = change_disp_val( log_count, 99, 0, data_pos.log_count.col, data_pos.log_count.row, 6 );
-}
-
-int access_data( FILE * fp, int pos, int data_len ) {
-    char data_str[10];
-    fseek( fp, pos, SEEK_SET );
-    fgets( data_str, data_len, fp );
-    return atoi( data_str );
-}
-
-void store_data( int hour, int min, int count ) {
-    int max_data_len = 9;
-    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
-    FILE * data_store = data_store = fopen( "data_store.txt", "w" );
-    if( data_store != NULL ) {
-        fseek( data_store, hour_pos, SEEK_SET );
-        fprintf( data_store, "%d", hour_intrvl );
-        fseek( data_store, min_pos, SEEK_SET );
-        fprintf( data_store, "%d", min_intrvl );
-        fseek( data_store, count_pos, SEEK_SET );
-        fprintf( data_store, "%d", log_count );
-        fclose( data_store );
-    } else {
-        printf( "could not create file data_store\n" );
+    if( direction == 'r' ) {
+        if( cur_disp_index == max_disp_index ) cur_disp_index = min_disp_index;
+        else cur_disp_index++;
     }
-}
+    else {
+        if( cur_disp_index == min_disp_index ) cur_disp_index = max_disp_index;
+        else cur_disp_index--;
+    }
 
-void read_stored_data() {
-    printf( "read_stored_data\n" );
-    FILE * data_store = fopen( "data_store.txt", "r+" );
-    int max_data_len = 9;
-    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
-    if( data_store != NULL ) {
-        hour_intrvl = access_data( data_store, hour_pos, max_data_len );
-        min_intrvl = access_data( data_store, min_pos, max_data_len );
-        log_count = access_data( data_store, count_pos, max_data_len );
-        fclose( data_store );
-    } else {
-        hour_intrvl = 0; min_intrvl = 1; log_count = 0;
-        store_data( hour_intrvl, min_intrvl, log_count );
+    time( &cur_time );
+    timeinfo = localtime( &cur_time );
+    switch( cur_disp_index ) {
+        case 1:
+            val = change_disp_val( timeinfo->tm_mday, 31, 1, data_pos.date.col, data_pos.date.row, 2 );
+            if( val != timeinfo->tm_mday ) set_time_val( 'd', val );
+            break;
+        case 2:
+            val = change_disp_val( timeinfo->tm_mon+1, 12, 1, data_pos.month.col, data_pos.month.row, 2 );
+            if( val != timeinfo->tm_mon+1 ) set_time_val( 'm', val-1 );
+            break;
+        case 3:
+            val = change_disp_val( timeinfo->tm_year+1900, 2100, 2000, data_pos.year.col, data_pos.year.row, 4 );
+            if( val != timeinfo->tm_year+1900 ) set_time_val( 'y', val-1900 );
+            break;
+        case 4:
+            val = change_disp_val( timeinfo->tm_hour, 23, 0, data_pos.hour.col, data_pos.hour.row, 2 );
+            if( val != timeinfo->tm_hour ) set_time_val( 'h', val );
+            break;
+        case 5:
+            val = change_disp_val( timeinfo->tm_min, 59, 0, data_pos.min.col, data_pos.min.row, 2 );
+            if( val != timeinfo->tm_min ) set_time_val( 'n', val );
+            break;
+        case 6:
+            val = change_disp_val( timeinfo->tm_sec, 59, 0, data_pos.sec.col, data_pos.sec.row, 2 );
+            if( val != timeinfo->tm_sec ) set_time_val( 's', val );
+            break;
+        case 7:
+            hour_intrvl = change_disp_val( hour_intrvl, 99, 0, data_pos.hour_intrvl.col, data_pos.hour_intrvl.row, 2 );
+            break;
+        case 8:
+            min_intrvl = change_disp_val( min_intrvl, 59, 1, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
+            break;
+        case 9:
+            log_count = change_disp_val( log_count, 0, 0, data_pos.log_count.col, data_pos.log_count.row, 6 );
+            if( log_count == 0 ) create_new_log_file();
+            break;
     }
 }
 
@@ -254,26 +240,80 @@ void display_data_lcd() {
     }
 }
 
-int is_time_to_write( time_t cur_time, time_t last_log_time ) {
+void store_data( int hour, int min, int count ) {
+    int max_data_len = 9;
+    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
+    FILE * data_store = data_store = fopen( "/home/data_store.txt", "w" );
+    if( data_store != NULL ) {
+        fseek( data_store, hour_pos, SEEK_SET );
+        fprintf( data_store, "%d", hour_intrvl );
+        fseek( data_store, min_pos, SEEK_SET );
+        fprintf( data_store, "%d", min_intrvl );
+        fseek( data_store, count_pos, SEEK_SET );
+        fprintf( data_store, "%d", log_count );
+        fclose( data_store );
+    } else {
+        printf( "could not create file data_store\n" );
+    }
+}
+
+int is_time_to_log( time_t cur_time, time_t last_log_time ) {
     //if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
     if( cur_time != last_log_time )
         return 1;
     return 0;
 }
 
+
+void fill_log_buffer( char * log_buffer, time_t cur_time ) {
+    char temperature[10];
+    char time_str[30];
+    sprintf( log_buffer, "\n%5d:\t", log_count + 1 );
+    int i;
+    for(i = 0; i < 6; i++ ) {
+        sprintf( temperature, "%4.1f\t", read_temperature( i ) );
+        strcat( log_buffer, temperature );
+    }
+    sprintf( time_str, "\t%s", ctime( &cur_time ) );
+    strcat( log_buffer, time_str );
+}
+
 int log_temperature( time_t cur_time ) {
-    char log_file[] = "temperature_log.txt";
-    char write_buffer[ 200 ];
-    fill_buffer( write_buffer, cur_time );
-    FILE *fout = fopen( log_file, "a+" );
-    if( fout != NULL ) {
-        fwrite(write_buffer, strlen(write_buffer), 1, fout);
-        fclose( fout );
+    char log_file[] = "/home/temperature_log.txt";
+    char log_buffer[ 200 ];
+    fill_log_buffer( log_buffer, cur_time );
+    FILE *f_log = fopen( log_file, "a+" );
+    if( f_log != NULL ) {
+        fwrite(log_buffer, strlen(log_buffer), 1, f_log);
+        fclose( f_log );
         sync();
-        printf( "%s\n", write_buffer );
+        printf( "%s\n", log_buffer );
         return 1;
     }
     return 0;
+}
+
+int get_stored_data( FILE * fp, int pos, int data_len ) {
+    char data_str[10];
+    fseek( fp, pos, SEEK_SET );
+    fgets( data_str, data_len, fp );
+    return atoi( data_str );
+}
+
+void read_stored_data() {
+    printf( "read_stored_data\n" );
+    FILE * data_store = fopen( "/home/data_store.txt", "r+" );
+    int max_data_len = 9;
+    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
+    if( data_store != NULL ) {
+        hour_intrvl = get_stored_data( data_store, hour_pos, max_data_len );
+        min_intrvl = get_stored_data( data_store, min_pos, max_data_len );
+        log_count = get_stored_data( data_store, count_pos, max_data_len );
+        fclose( data_store );
+    } else {
+        hour_intrvl = 0; min_intrvl = 1; log_count = 0;
+        store_data( hour_intrvl, min_intrvl, log_count );
+    }
 }
 
 void input_key_init() {
@@ -307,22 +347,27 @@ int main() {
     while( 1 ) {
         iter_count++;
         time( &cur_time );
-        if( is_time_to_write( cur_time, last_log_time ) ) {
+        if( is_time_to_log( cur_time, last_log_time ) ) {
             if( log_temperature( cur_time ) ) {
                 log_count++;
                 store_data( hour_intrvl, min_intrvl, log_count );
+                last_log_time = cur_time;
+                if( log_count >= max_log_count ) {
+                    create_new_log_file();
+                    log_count = 0;
+                }
             }
-            last_log_time = cur_time;
         }
         if( is_key_pressed( set_key ) )
             usb_device_write();
-        else if( is_key_pressed( cursor_left ) || is_key_pressed( cursor_right ) )
-            set_mode();
+        else if( is_key_pressed( cursor_left ) )
+            set_mode( 'l' );
+        else if ( is_key_pressed( cursor_right ) )
+            set_mode( 'r' );
         if( iter_count > 1000 ) {
             display_data_lcd();
             iter_count = 0;
         }
     }
-    
     return 0;
 }
