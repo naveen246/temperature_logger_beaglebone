@@ -162,7 +162,7 @@ void set_time_val( char c, int val ) {
 void set_mode( char direction ) {
     static cur_disp_index = 0;
     int max_disp_index = 9, min_disp_index = 1;
-    int val;
+    int val, prev_val;
     time_t cur_time;
     struct tm * timeinfo;
 
@@ -203,14 +203,21 @@ void set_mode( char direction ) {
             if( val != timeinfo->tm_sec ) set_time_val( 's', val );
             break;
         case 7:
+            prev_val = hour_intrvl;
             hour_intrvl = change_disp_val( hour_intrvl, 99, 0, data_pos.hour_intrvl.col, data_pos.hour_intrvl.row, 2 );
+            if( prev_val != hour_intrvl )   store_data();
             break;
         case 8:
+            prev_val = min_intrvl;
             min_intrvl = change_disp_val( min_intrvl, 59, 1, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
+            if( prev_val != min_intrvl )   store_data();
             break;
         case 9:
             log_count = change_disp_val( log_count, 0, 0, data_pos.log_count.col, data_pos.log_count.row, 6 );
-            if( log_count == 0 ) create_new_log_file();
+            if( log_count == 0 ) {
+                create_new_log_file();
+                store_data();
+            }
             break;
     }
 }
@@ -240,7 +247,7 @@ void display_data_lcd() {
     }
 }
 
-void store_data( int hour, int min, int count ) {
+void store_data() {
     int max_data_len = 9;
     int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
     FILE * data_store = data_store = fopen( "/home/data_store.txt", "w" );
@@ -258,8 +265,7 @@ void store_data( int hour, int min, int count ) {
 }
 
 int is_time_to_log( time_t cur_time, time_t last_log_time ) {
-    //if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
-    if( cur_time != last_log_time )
+    if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
         return 1;
     return 0;
 }
@@ -312,7 +318,7 @@ void read_stored_data() {
         fclose( data_store );
     } else {
         hour_intrvl = 0; min_intrvl = 1; log_count = 0;
-        store_data( hour_intrvl, min_intrvl, log_count );
+        store_data();
     }
 }
 
@@ -350,7 +356,7 @@ int main() {
         if( is_time_to_log( cur_time, last_log_time ) ) {
             if( log_temperature( cur_time ) ) {
                 log_count++;
-                store_data( hour_intrvl, min_intrvl, log_count );
+                store_data();
                 last_log_time = cur_time;
                 if( log_count >= max_log_count ) {
                     create_new_log_file();

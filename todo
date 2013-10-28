@@ -14,6 +14,6 @@ implement limiting of data_log to some limit 						- done
 write log_count to log 												- done
 
 
-refine setmode 
-reduce startup time
-when count is set to 0 call create_new_log_file()
+refine setmode 										
+reduce startup time 								
+when count is set to 0 call create_new_log_file() 					- done
