@@ -80,13 +80,17 @@ void create_new_log_file() {
 void usb_device_write() {
     system("mkdir /media/usb_device" );
     system("mount -U 44B3-2CFA /media/usb_device");
+    lcd_gotoxy( 1, 4 );
+    lcd_puts( "Transferring Data...", 20 );
     system("cp /home/temperature_log.txt /media/usb_device");
+    delay_ms( 1000 );
     system("cp /home/temperature_log_old.txt /media/usb_device");
+    delay_ms( 2000 );
     system("umount /media/usb_device");
+    system("rm -r /media/usb_device");
     lcd_gotoxy( 1, 4 );
     lcd_puts( "Data transfer done  ", 20 );
-    delay_ms( 1000 );
-    delay_ms( 1000 );
+    delay_ms( 2000 );
     //system("if [ -d \"/media/USB20FD\" ]; then cp temperature_log.txt /media/USB20FD; else echo \"usb drive not inserted properly\"; fi");
 }
 
@@ -157,6 +161,23 @@ void set_time_val( char c, int val ) {
             timeinfo->tm_sec = val; break;
     }
     set_rtc_time( timeinfo );
+}
+
+void store_data() {
+    int max_data_len = 9;
+    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
+    FILE * data_store = data_store = fopen( "/home/data_store.txt", "w" );
+    if( data_store != NULL ) {
+        fseek( data_store, hour_pos, SEEK_SET );
+        fprintf( data_store, "%d", hour_intrvl );
+        fseek( data_store, min_pos, SEEK_SET );
+        fprintf( data_store, "%d", min_intrvl );
+        fseek( data_store, count_pos, SEEK_SET );
+        fprintf( data_store, "%d", log_count );
+        fclose( data_store );
+    } else {
+        printf( "could not create file data_store\n" );
+    }
 }
 
 void set_mode( char direction ) {
@@ -244,23 +265,6 @@ void display_data_lcd() {
         fill_line_str( cur_line, line_no );
         lcd_gotoxy( 1, line_no );
         lcd_puts( cur_line, 20 );
-    }
-}
-
-void store_data() {
-    int max_data_len = 9;
-    int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
-    FILE * data_store = data_store = fopen( "/home/data_store.txt", "w" );
-    if( data_store != NULL ) {
-        fseek( data_store, hour_pos, SEEK_SET );
-        fprintf( data_store, "%d", hour_intrvl );
-        fseek( data_store, min_pos, SEEK_SET );
-        fprintf( data_store, "%d", min_intrvl );
-        fseek( data_store, count_pos, SEEK_SET );
-        fprintf( data_store, "%d", log_count );
-        fclose( data_store );
-    } else {
-        printf( "could not create file data_store\n" );
     }
 }
 

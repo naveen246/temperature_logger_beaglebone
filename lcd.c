@@ -21,6 +21,12 @@ void init_lcd_port() {
 /* lcd functions */
 
 void delay_ms( int ms ) {
+    if( ms > 1000 ) {
+        while( ms > 1000 ) {
+            usleep( 1000 * 1000 );
+            ms -= 1000;
+        }
+    }
     usleep( ms * 1000 );
 }
 
