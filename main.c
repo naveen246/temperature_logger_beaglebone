@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <mntent.h>
 
 #include "io_lib.h"
 #include "lcd.h"
@@ -69,7 +70,7 @@ double read_temperature( int index ) {
     char adc_file[40];
     char adc_str[10];
 
-    sprintf( adc_file, "/sys/devices/ocp.2/helper.14/AIN%d", index );
+    sprintf( adc_file, "/sys/devices/ocp.2/helper.11/AIN%d", index );
     read_val( adc_file, adc_str );
     double temperature = adc_mv_to_celsius( atoi( adc_str ) );
     if( temperature < -99 ) temperature = -99;
@@ -82,16 +83,28 @@ void create_new_log_file() {
     rename( log_path, old_log_path );
 }
 
+int is_mounted (char * mount_dir) {
+    FILE * mtab = NULL;
+    struct mntent * part = NULL;
+    if( ( mtab = setmntent( "/etc/mtab", "r" ) ) != NULL ) {
+        while( ( part = getmntent( mtab ) ) != NULL ) {
+            if( part->mnt_dir != NULL && strcmp( part->mnt_dir, mount_dir ) == 0 ) {
+                endmntent( mtab );
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 void usb_device_write() {
-    DIR* dir = opendir(usb_drive);
-    char cmd[50];
-    if (dir) {
-        closedir(dir);
+    char cmd[200];
+    if( is_mounted( usb_drive ) ) {
         lcd_gotoxy( 1, 4 );
         lcd_puts( "Transferring Data...", 20 );
         sprintf( cmd, "cp %s %s", log_path, usb_drive );
         system(cmd);
-        delay_ms( 1000 );
+        delay_ms( 2000 );
         sprintf( cmd, "cp %s %s", old_log_path, usb_drive );
         system(cmd);
         delay_ms( 2000 );
