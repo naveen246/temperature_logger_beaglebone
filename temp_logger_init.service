@@ -1,0 +1,10 @@
+[Unit]
+Description=Temperature logger initialization
+
+[Service]
+Type=simple
+ExecStart=/home/root/temp_logger/temp_logger_init.sh
+
+[Install]
+WantedBy=multi-user.target
+

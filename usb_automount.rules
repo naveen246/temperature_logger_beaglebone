@@ -1,0 +1,2 @@
+ACTION=="add", ENV{ID_FS_UUID}=="44B3-2CFA", RUN+="/bin/mount -U $env{ID_FS_UUID} /media/usb_device"
+ACTION=="remove", RUN+="/bin/umount /media/usb_device"

@@ -5,6 +5,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #include "io_lib.h"
 #include "lcd.h"
@@ -16,6 +18,11 @@
 #define set_key         8  
 
 #define max_log_count   10000
+
+#define log_path        "/home/root/temperature_log.txt"
+#define old_log_path    "/home/root/temperature_log_old.txt"
+#define data_store_path "/home/root/data_store.txt"
+#define usb_drive       "/media/usb_device"
 
 typedef struct lcd_xy {
     int col;
@@ -62,7 +69,7 @@ double read_temperature( int index ) {
     char adc_file[40];
     char adc_str[10];
 
-    sprintf( adc_file, "/sys/devices/ocp.2/helper.11/AIN%d", index );
+    sprintf( adc_file, "/sys/devices/ocp.2/helper.14/AIN%d", index );
     read_val( adc_file, adc_str );
     double temperature = adc_mv_to_celsius( atoi( adc_str ) );
     if( temperature < -99 ) temperature = -99;
@@ -71,27 +78,33 @@ double read_temperature( int index ) {
 }
 
 void create_new_log_file() {
-    //system("rm /home/temperature_log_old.txt");
-    //system("mv /home/temperature_log.txt /home/temperature_log_old.txt");
-    remove( "/home/temperature_log_old.txt" );
-    rename( "/home/temperature_log.txt", "/home/temperature_log_old.txt" );
+    remove( old_log_path );
+    rename( log_path, old_log_path );
 }
 
 void usb_device_write() {
-    system("mkdir /media/usb_device" );
-    system("mount -U 44B3-2CFA /media/usb_device");
-    lcd_gotoxy( 1, 4 );
-    lcd_puts( "Transferring Data...", 20 );
-    system("cp /home/temperature_log.txt /media/usb_device");
-    delay_ms( 1000 );
-    system("cp /home/temperature_log_old.txt /media/usb_device");
-    delay_ms( 2000 );
-    system("umount /media/usb_device");
-    system("rm -r /media/usb_device");
-    lcd_gotoxy( 1, 4 );
-    lcd_puts( "Data transfer done  ", 20 );
-    delay_ms( 2000 );
-    //system("if [ -d \"/media/USB20FD\" ]; then cp temperature_log.txt /media/USB20FD; else echo \"usb drive not inserted properly\"; fi");
+    DIR* dir = opendir(usb_drive);
+    char cmd[50];
+    if (dir) {
+        closedir(dir);
+        lcd_gotoxy( 1, 4 );
+        lcd_puts( "Transferring Data...", 20 );
+        sprintf( cmd, "cp %s %s", log_path, usb_drive );
+        system(cmd);
+        delay_ms( 1000 );
+        sprintf( cmd, "cp %s %s", old_log_path, usb_drive );
+        system(cmd);
+        delay_ms( 2000 );
+        sprintf( cmd, "umount %s", usb_drive );
+        system(cmd);
+        lcd_gotoxy( 1, 4 );
+        lcd_puts( "Data transfer done  ", 20 );
+        delay_ms( 2000 );
+    } else {
+        lcd_gotoxy( 1, 4 );
+        lcd_puts( "Re-insert USB device", 20 );
+        delay_ms( 2000 );
+    }
 }
 
 int is_key_pressed( int key ) {
@@ -166,7 +179,7 @@ void set_time_val( char c, int val ) {
 void store_data() {
     int max_data_len = 9;
     int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
-    FILE * data_store = data_store = fopen( "/home/data_store.txt", "w" );
+    FILE * data_store = data_store = fopen( data_store_path, "w" );
     if( data_store != NULL ) {
         fseek( data_store, hour_pos, SEEK_SET );
         fprintf( data_store, "%d", hour_intrvl );
@@ -230,7 +243,7 @@ void set_mode( char direction ) {
             break;
         case 8:
             prev_val = min_intrvl;
-            min_intrvl = change_disp_val( min_intrvl, 59, 1, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
+            min_intrvl = change_disp_val( min_intrvl, 59, 0, data_pos.min_intrvl.col, data_pos.min_intrvl.row, 2 );
             if( prev_val != min_intrvl )   store_data();
             break;
         case 9:
@@ -269,7 +282,8 @@ void display_data_lcd() {
 }
 
 int is_time_to_log( time_t cur_time, time_t last_log_time ) {
-    if( cur_time - last_log_time >= hour_intrvl * 3600 + min_intrvl * 60 )
+    time_t intrvl_time = hour_intrvl * 3600 + min_intrvl * 60;
+    if( intrvl_time > 0 && cur_time - last_log_time >= intrvl_time )
         return 1;
     return 0;
 }
@@ -289,10 +303,9 @@ void fill_log_buffer( char * log_buffer, time_t cur_time ) {
 }
 
 int log_temperature( time_t cur_time ) {
-    char log_file[] = "/home/temperature_log.txt";
     char log_buffer[ 200 ];
     fill_log_buffer( log_buffer, cur_time );
-    FILE *f_log = fopen( log_file, "a+" );
+    FILE *f_log = fopen( log_path, "a+" );
     if( f_log != NULL ) {
         fwrite(log_buffer, strlen(log_buffer), 1, f_log);
         fclose( f_log );
@@ -312,7 +325,7 @@ int get_stored_data( FILE * fp, int pos, int data_len ) {
 
 void read_stored_data() {
     printf( "read_stored_data\n" );
-    FILE * data_store = fopen( "/home/data_store.txt", "r+" );
+    FILE * data_store = fopen( data_store_path, "r+" );
     int max_data_len = 9;
     int hour_pos = 1, min_pos = hour_pos + max_data_len, count_pos = min_pos + max_data_len;
     if( data_store != NULL ) {

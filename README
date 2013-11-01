@@ -1,0 +1,2 @@
+#run launch_at_boot.sh script once to call temp_logger_init.sh everytime on startup
+#also add capemgr.disable_partno=BB-BONELT-HDMI,BB-BONELT-HDMIN to uEnv.txt to disable HDMI capes

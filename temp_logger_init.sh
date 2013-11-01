@@ -9,5 +9,4 @@ hwclock -s -f /dev/rtc1						#Set the System Time from the Hardware Clock
 hwclock -w							#Set the Hardware Clock to the current System Time
 
 # run temp_logger in the background
-echo "Starting temp_logger:"
-/home/root/programs/temp_logger/temp_logger &
+/home/root/temp_logger/temp_logger
