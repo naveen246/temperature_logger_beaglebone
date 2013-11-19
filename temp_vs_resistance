@@ -1,0 +1,13 @@
+
+temperature to rth:
+rth = e^((((1/(temp+273)) - (1/298))*3480) + ln(10000))
+
+adc_v to rth:
+rth = (adc_v * 26300) / (2.5 - adc_v)
+
+rth to temperature:
+temperature = 1/((1/298) + ( (1/3480) * ln(rth/10000) )) - 273
+
+adc_v to temperature:
+temperature = 1/((1/298) + ( (1/3480) * ln(( (adc_v * 26300) / (2.5 - adc_v) )/10000) )) - 273
+

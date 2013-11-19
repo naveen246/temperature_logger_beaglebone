@@ -51,7 +51,7 @@ int hour_intrvl = 0, min_intrvl = 1, log_count = 0;
 
 
 double ohms_to_celsius( double ohms ) {
-    double beta = 3480; // ( see thermistor datasheet for value )
+    double beta = 3480;//3109; // ( see thermistor datasheet for value )
     double temperature_inv = ( 1 / 298.15 ) + ( 1 / beta ) * ( log( ohms / 10000 ) );
     printf( "temp_inv = %f\n", temperature_inv );
     return ( 1 / temperature_inv ) - 273.15;
@@ -61,7 +61,7 @@ double ohms_to_celsius( double ohms ) {
 double get_thermistor_resistance( int adc_mv ) {
     double vout = (double)adc_mv / 1000;    // output voltage of voltage divider circuit used
     double vin = 2.5;               // input voltage of voltage divider
-    double rpot = 12000;            // resistance of potentiometer 
+    double rpot = 26300;            // resistance of potentiometer 
     return vout * rpot / ( vin - vout );
 }
 
@@ -71,13 +71,23 @@ double adc_mv_to_celsius( int adc_mv ) {
     return ohms_to_celsius( rth );
 }
 
-double read_temperature( int index ) {
+int average_adc( int index ) {
     char adc_file[40];
     char adc_str[10];
-
+    unsigned long adc_sum = 0;
+    int i;
     sprintf( adc_file, "/sys/devices/ocp.2/helper.11/AIN%d", index );
-    read_val( adc_file, adc_str );
-    double temperature = adc_mv_to_celsius( atoi( adc_str ) );
+
+    for( i = 0; i < 100; i++ ) {    
+        read_val( adc_file, adc_str );
+        adc_sum += atoi( adc_str );
+    }
+    return adc_sum / 100;
+}
+
+double read_temperature( int index ) {
+    int adc_mv = average_adc( index );
+    double temperature = adc_mv_to_celsius( adc_mv );
     if( index == 1 ) {
         printf("temperature = %f\n", temperature);
     }
