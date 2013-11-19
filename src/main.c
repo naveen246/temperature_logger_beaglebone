@@ -51,19 +51,24 @@ int hour_intrvl = 0, min_intrvl = 1, log_count = 0;
 
 
 double ohms_to_celsius( double ohms ) {
-    double beta = 3930; // ( approx value, see datasheet for accurate value )
+    double beta = 3480; // ( see thermistor datasheet for value )
     double temperature_inv = ( 1 / 298.15 ) + ( 1 / beta ) * ( log( ohms / 10000 ) );
-    return 1 / temperature_inv - 273.15;
+    printf( "temp_inv = %f\n", temperature_inv );
+    return ( 1 / temperature_inv ) - 273.15;
 }
 
-double adc_mv_to_ohms( int adc_mv ) {
-    double adc_v = adc_mv / 1000;
-    return ( 18.25 * adc_v ) / ( 9.125 - adc_v * 8.65 );
+
+double get_thermistor_resistance( int adc_mv ) {
+    double vout = (double)adc_mv / 1000;    // output voltage of voltage divider circuit used
+    double vin = 2.5;               // input voltage of voltage divider
+    double rpot = 12000;            // resistance of potentiometer 
+    return vout * rpot / ( vin - vout );
 }
 
 double adc_mv_to_celsius( int adc_mv ) {
-    double ohms = adc_mv_to_ohms( adc_mv );
-    return ohms_to_celsius( ohms );
+    double rth = get_thermistor_resistance( adc_mv );
+    printf("\nadc = %d\tth_res = %f\n", adc_mv, rth);
+    return ohms_to_celsius( rth );
 }
 
 double read_temperature( int index ) {
@@ -73,6 +78,9 @@ double read_temperature( int index ) {
     sprintf( adc_file, "/sys/devices/ocp.2/helper.11/AIN%d", index );
     read_val( adc_file, adc_str );
     double temperature = adc_mv_to_celsius( atoi( adc_str ) );
+    if( index == 1 ) {
+        printf("temperature = %f\n", temperature);
+    }
     if( temperature < -99 ) temperature = -99;
     else if( temperature > 999 ) temperature = 999;
     return temperature;
@@ -271,9 +279,9 @@ void set_mode( char direction ) {
 
 void fill_line_str( char * cur_line, int line_no ) {
     if( line_no == 1 )
-        sprintf( cur_line, "%3.1f  %3.1f  %3.1f ", read_temperature(0), read_temperature(1), read_temperature(2) );
+        sprintf( cur_line, "%5.1f  %5.1f  %5.1f ", read_temperature(0), read_temperature(1), read_temperature(2) );
     else if( line_no == 2 )
-        sprintf( cur_line, "%3.1f  %3.1f  %3.1f ", read_temperature(3), read_temperature(4), read_temperature(5) );
+        sprintf( cur_line, "%5.1f  %5.1f  %5.1f ", read_temperature(3), read_temperature(4), read_temperature(5) );
     else if( line_no == 3 ) {
         time_t cur_time;
         time( &cur_time );
