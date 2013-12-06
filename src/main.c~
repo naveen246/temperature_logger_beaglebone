@@ -49,8 +49,6 @@ lcd_pos data_pos =  {   .date = { 1, 3 },   .month = { 4, 3 },  .year = { 7, 3 }
 
 int hour_intrvl = 0, min_intrvl = 1, log_count = 0;
 
-int prev_adc_mv[6] = {0};
-
 //resistance of thermistors at 25.1 celsius
 double res_at_25_1[ 6 ] = { 10840, 9900, 10280, 9790, 9450, 9480 };
 
@@ -74,58 +72,23 @@ double adc_mv_to_celsius( int adc_mv, int index ) {
     return ohms_to_celsius( rth, index );
 }
 
-void build_path( char * path, char * dir_to_find, int dir_char_count ) {
-    DIR *dp;
-    struct dirent *ep;     
-    dp = opendir ( path );
-    if (dp != NULL) {
-        while (ep = readdir (dp)) {
-            if( strncmp( ep->d_name, dir_to_find, dir_char_count ) == 0 ) {
-                sprintf( path, "%s/%s", path, ep->d_name );
-                (void) closedir (dp);
-                return;
-            }
-        }
-        (void) closedir (dp);
-    }
-    else
-        perror ("Couldn't open the directory");
-}
-
-void get_adc_path( char * adc_path, int index ) {
-    sprintf( adc_path, "/sys/devices" );
-    build_path( adc_path, "ocp", 3 );
-    build_path( adc_path, "helper", 6 );
-    sprintf( adc_path, "%s/AIN%d", adc_path, index );
-}
-
 int average_adc( int index ) {
-    char adc_path[40];
+    char adc_file[40];
     char adc_str[10];
-    int adc_mv;
-    int adc_mv_135_celsius = 40;
-    int adc_mv_sub_zero = 1700;
-    int i = 0;
-    if( index == 0 ) index = 6; // AIN6 used instead of AIN0
-    get_adc_path( adc_path, index );
+    unsigned long adc_sum = 0;
+    int i;
+    sprintf( adc_file, "/sys/devices/ocp.2/helper.14/AIN%d", index );
 
-    do {
-        read_val( adc_path, adc_str );
-        adc_mv = atoi(adc_str);
-        delay_ms( 500 );    
-    } while( i++ < 5 && ( adc_mv < adc_mv_135_celsius || adc_mv > adc_mv_sub_zero ));
-
-    if( adc_mv < adc_mv_135_celsius || adc_mv > adc_mv_sub_zero ) {
-        return prev_adc_mv[index];
-    } else {
-        prev_adc_mv[index] = adc_mv;
-        return adc_mv;
+    for( i = 0; i < 500; i++ ) {    
+        read_val( adc_file, adc_str );
+        adc_sum += atoi( adc_str );
     }
+    return adc_sum / 500;
 }
 
 double read_temperature( int index ) {
     int adc_mv = average_adc( index );
-    printf("\nindex: %d\t", index, adc_mv);
+    printf("\nindex: %d\t", index);
     double temperature = adc_mv_to_celsius( adc_mv, index );
     printf("temperature = %f\n", temperature);
     if( temperature < -10 ) temperature = -10;

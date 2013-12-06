@@ -1,4 +1,5 @@
 
+#include <math.h>
 #include "lcd.h"
 #include "io_lib.h"
 
